@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Antrian Pasien Pro</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #eef2f7;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        form, .control-panel, .search-section {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .grid-input {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        button:hover { opacity: 0.9; }
+        
+        .save-btn { background-color: #27ae60; color: white; width: 100%; }
+        .edit-btn { background-color: #2980b9; color: white; padding: 6px 12px; font-size: 12px; }
+        .delete-btn { background-color: #c0392b; color: white; padding: 6px 12px; font-size: 12px; }
+        .clear-btn { background-color: #7f8c8d; color: white; }
+        .call-btn { background-color: #8e44ad; color: white; flex: 1; min-width: 200px; }
+        .voice-btn { background-color: #d35400; color: white; padding: 6px 12px; font-size: 12px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        th { background-color: #f8f9fa; color: #7f8c8d; font-size: 13px; text-transform: uppercase; }
+        
+        .voice-settings {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .status-badge {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        .download-footer {
+            text-align: center;
+            margin-top: 30px;
+        }
+        .download-link {
+            color: #2980b9;
+            text-decoration: none;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 Sistem Antrian Pasien Pro</h1>
+
+        <form id="patientForm">
+            <div class="grid-input">
+                <div class="field">
+                    <label for="patientName">Nama Pasien</label>
+                    <input type="text" id="patientName" placeholder="Masukkan nama..." required>
+                </div>
+                <div class="field">
+                    <label for="queueNumber">Nomor Antrian</label>
+                    <input type="text" id="queueNumber" placeholder="Contoh: A-01" required>
+                </div>
+            </div>
+            <button type="submit" class="save-btn">➕ Simpan ke Daftar Antrian</button>
+        </form>
+
+        <div class="control-panel">
+            <label>Pengaturan Suara Panggilan</label>
+            <div class="voice-settings">
+                <select id="voiceSelect">
+                    <option value="">Memuat suara...</option>
+                </select>
+                <select id="genderSelect">
+                    <option value="female">Preferensi: Perempuan</option>
+                    <option value="male">Preferensi: Laki-laki</option>
+                </select>
+            </div>
+            <div class="btn-group" style="margin-top: 15px;">
+                <button class="call-btn" onclick="callQueueFull()">📢 Panggil Antrian (Gaya Bank)</button>
+                <button class="clear-btn" onclick="clearAllData()">🗑️ Reset Antrian</button>
+            </div>
+        </div>
+
+        <div class="search-section">
+            <input type="text" id="searchInput" placeholder="🔍 Cari nama atau nomor antrian...">
+        </div>
+
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>Pasien</th>
+                    <th>No. Antrian</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+
+        <div class="download-footer">
+            <a href="#" class="download-link" onclick="downloadHTML()">💾 Unduh Source Code Antrian</a>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('patientForm');
+        const tableBody = document.getElementById('tableBody');
+        const searchInput = document.getElementById('searchInput');
+        const voiceSelect = document.getElementById('voiceSelect');
+        const genderSelect = document.getElementById('genderSelect');
+
+        let data = JSON.parse(localStorage.getItem('patientQueue_v2')) || [];
+        let editIndex = -1;
+        let voices = [];
+
+        // Inisialisasi Suara
+        function populateVoiceList() {
+            voices = window.speechSynthesis.getVoices();
+            voiceSelect.innerHTML = '';
+            
+            // Filter hanya suara Indonesia atau default
+            const filteredVoices = voices.filter(v => v.lang.includes('id') || v.lang.includes('id-ID'));
+            
+            if (filteredVoices.length === 0) {
+                const opt = document.createElement('option');
+                opt.textContent = "Suara Indonesia Tidak Ditemukan (Gunakan Default)";
+                opt.value = "";
+                voiceSelect.appendChild(opt);
+            }
+
+            voices.forEach((voice, i) => {
+                const option = document.createElement('option');
+                option.textContent = `${voice.name} (${voice.lang})`;
+                option.setAttribute('data-lang', voice.lang);
+                option.setAttribute('data-name', voice.name);
+                option.value = i;
+                
+                // Pilih otomatis jika Indonesia
+                if(voice.lang === 'id-ID') option.selected = true;
+                
+                voiceSelect.appendChild(option);
+            });
+        }
+
+        populateVoiceList();
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = populateVoiceList;
+        }
+
+        // Simpan Data
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const patientName = document.getElementById('patientName').value;
+            const queueNumber = document.getElementById('queueNumber').value;
+
+            const record = { patientName, queueNumber, status: 'Menunggu' };
+
+            if (editIndex >= 0) {
+                data[editIndex] = record;
+                editIndex = -1;
+            } else {
+                data.push(record);
+            }
+
+            localStorage.setItem('patientQueue_v2', JSON.stringify(data));
+            renderTable();
+            form.reset();
+        });
+
+        function renderTable() {
+            tableBody.innerHTML = '';
+            data.forEach((record, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="font-weight:600">${record.patientName}</td>
+                    <td><span style="background:#eee; padding:4px 8px; border-radius:4px; font-family:monospace">${record.queueNumber}</span></td>
+                    <td><span class="status-badge">${record.status}</span></td>
+                    <td>
+                        <div style="display:flex; gap:5px">
+                            <button class="voice-btn" onclick="speakSingle('${record.queueNumber}', '${record.patientName}')">Panggil</button>
+                            <button class="edit-btn" onclick="editRecord(${index})">Edit</button>
+                            <button class="delete-btn" onclick="deleteRecord(${index})">Hapus</button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        window.speakSingle = (num, name) => {
+            const text = `Nomor antrian. ${num}. Atas nama. ${name}. Silahkan menuju ke loket pendaftaran.`;
+            executeSpeak(text);
+        };
+
+        window.callQueueFull = () => {
+            if (data.length === 0) return alert('Daftar antrian kosong');
+            // Panggil antrian pertama yang statusnya menunggu (simulasi sederhana)
+            const next = data.find(d => d.status === 'Menunggu') || data[0];
+            const text = `Mohon perhatian. Nomor antrian. ${next.queueNumber}. ${next.patientName}. Silahkan menuju ke loket pendaftaran. Terimakasih.`;
+            executeSpeak(text);
+        };
+
+        function executeSpeak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                
+                // Pilih suara berdasarkan dropdown
+                if (voiceSelect.value !== "") {
+                    utterance.voice = voices[voiceSelect.value];
+                }
+
+                // Pengaturan Pitch (Simulasi Laki-laki/Perempuan jika suara sistem terbatas)
+                // Pitch 1.0 = Normal, 0.5 = Berat (Laki-laki), 1.5 = Tinggi (Perempuan)
+                const gender = genderSelect.value;
+                if (gender === 'male') {
+                    utterance.pitch = 0.8;
+                    utterance.rate = 0.85;
+                } else {
+                    utterance.pitch = 1.2;
+                    utterance.rate = 0.95;
+                }
+
+                utterance.lang = 'id-ID';
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        window.editRecord = (index) => {
+            const record = data[index];
+            document.getElementById('patientName').value = record.patientName;
+            document.getElementById('queueNumber').value = record.queueNumber;
+            editIndex = index;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        window.deleteRecord = (index) => {
+            if(confirm('Hapus data ini?')) {
+                data.splice(index, 1);
+                localStorage.setItem('patientQueue_v2', JSON.stringify(data));
+                renderTable();
+            }
+        };
+
+        window.clearAllData = () => {
+            if(confirm('Kosongkan semua antrian?')) {
+                data = [];
+                localStorage.removeItem('patientQueue_v2');
+                renderTable();
+            }
+        };
+
+        searchInput.addEventListener('input', function() {
+            const q = this.value.toLowerCase();
+            document.querySelectorAll('#tableBody tr').forEach(row => {
+                row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        });
+
+        window.downloadHTML = () => {
+            const html = document.documentElement.outerHTML;
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Sistem_Antrian_Bank_Pro.html';
+            a.click();
+        };
+
+        renderTable();
+    </script>
+</body>
+</html>
